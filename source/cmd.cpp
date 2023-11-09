@@ -18,6 +18,16 @@
 #include <map>
 #include <vector>
 
+#ifndef VERSION_MAJOR
+#define VERSION_MAJOR   1
+#endif
+#ifndef VERSION_MINOR
+#define VERSION_MINOR   2
+#endif
+#ifndef VERSION_MICRO
+#define VERSION_MICRO   0
+#endif
+
 typedef enum {
     RGB565,
     RGBA4444
@@ -302,45 +312,59 @@ static int cmd_make_banner(const std::string* images, const std::string& audio, 
     return 0;
 }
 
-static int cmd_make_smdh(SMDH& smdh, const std::string& icon, const std::string& output) {
+static int cmd_make_smdh(SMDH& smdh, const std::string& icon, const std::string& smallIcon, const std::string& output) {
     u8* icon48Data = (u8*) load_image(icon.c_str(), SMDH_LARGE_ICON_SIZE, SMDH_LARGE_ICON_SIZE);
     if(icon48Data == NULL) {
         return 1;
     }
 
-    u8 icon24Data[SMDH_SMALL_ICON_SIZE * SMDH_SMALL_ICON_SIZE * sizeof(u32)];
+    bool noSmallIcon = smallIcon.empty();
+    u8* icon24Data;
+    if (noSmallIcon) {
+        icon24Data = new u8[SMDH_SMALL_ICON_SIZE * SMDH_SMALL_ICON_SIZE * sizeof(u32)];
 
-    u32 scale = SMDH_LARGE_ICON_SIZE / SMDH_SMALL_ICON_SIZE;
-    u32 samples = scale * scale;
-    for(u32 y = 0; y < SMDH_LARGE_ICON_SIZE; y += scale) {
-        for(u32 x = 0; x < SMDH_LARGE_ICON_SIZE; x += scale) {
-            u32 r = 0;
-            u32 g = 0;
-            u32 b = 0;
-            u32 a = 0;
+        u32 scale = SMDH_LARGE_ICON_SIZE / SMDH_SMALL_ICON_SIZE;
+        u32 samples = scale * scale;
+        for(u32 y = 0; y < SMDH_LARGE_ICON_SIZE; y += scale) {
+            for(u32 x = 0; x < SMDH_LARGE_ICON_SIZE; x += scale) {
+                u32 r = 0;
+                u32 g = 0;
+                u32 b = 0;
+                u32 a = 0;
 
-            for(u32 oy = 0; oy < scale; oy++) {
-                for(u32 ox = 0; ox < scale; ox++) {
-                    int i = ((y + oy) * SMDH_LARGE_ICON_SIZE + (x + ox)) * sizeof(u32);
-                    r += icon48Data[i + 0];
-                    g += icon48Data[i + 1];
-                    b += icon48Data[i + 2];
-                    a += icon48Data[i + 3];
+                for(u32 oy = 0; oy < scale; oy++) {
+                    for(u32 ox = 0; ox < scale; ox++) {
+                        int i = ((y + oy) * SMDH_LARGE_ICON_SIZE + (x + ox)) * sizeof(u32);
+                        r += icon48Data[i + 0];
+                        g += icon48Data[i + 1];
+                        b += icon48Data[i + 2];
+                        a += icon48Data[i + 3];
+                    }
                 }
+
+                int i = ((y / scale) * SMDH_SMALL_ICON_SIZE + (x / scale)) * sizeof(u32);
+                icon24Data[i + 0] = (u8) (r / samples);
+                icon24Data[i + 1] = (u8) (g / samples);
+                icon24Data[i + 2] = (u8) (b / samples);
+                icon24Data[i + 3] = (u8) (a / samples);
             }
-
-            int i = ((y / scale) * SMDH_SMALL_ICON_SIZE + (x / scale)) * sizeof(u32);
-            icon24Data[i + 0] = (u8) (r / samples);
-            icon24Data[i + 1] = (u8) (g / samples);
-            icon24Data[i + 2] = (u8) (b / samples);
-            icon24Data[i + 3] = (u8) (a / samples);
         }
-    }
+    } else {
+        icon24Data = (u8*) load_image(smallIcon.c_str(), SMDH_SMALL_ICON_SIZE, SMDH_SMALL_ICON_SIZE);
+        if(icon24Data == NULL) {
+            return 1;
+        }
 
+    }
     image_data_to_tiles(smdh.largeIcon, icon48Data, SMDH_LARGE_ICON_SIZE, SMDH_LARGE_ICON_SIZE, RGB565);
     image_data_to_tiles(smdh.smallIcon, icon24Data, SMDH_SMALL_ICON_SIZE, SMDH_SMALL_ICON_SIZE, RGB565);
 
     free_image(icon48Data);
+
+    if (noSmallIcon)
+        delete[] icon24Data;
+    else
+        free_image(icon24Data);
 
     if(!write_file(&smdh, sizeof(SMDH), output)) {
         return 1;
@@ -426,6 +450,10 @@ static std::vector<std::string> cmd_parse_list(const std::string& list) {
     return ret;
 }
 
+static void cmd_print_version(){
+    printf("bannertool v%d.%d.%d-CY64\n", VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO);
+}
+
 static void cmd_print_info(const std::string& command) {
     if(command.compare("makebanner") == 0) {
         printf("makebanner - Creates a .bnr file.\n");
@@ -502,6 +530,7 @@ static void cmd_print_info(const std::string& command) {
         printf("    -rp/--russianpublisher: Optional if default specified. Russian publisher of the application.\n");
         printf("    -tcp/--traditionalchinesepublisher: Optional if default specified. Traditional Chinese publisher of the application.\n");
         printf("  -i/--icon: PNG file to use as an icon.\n");
+        printf("  -si/--smallicon: Optional. PNG file to use as the small icon.\n");
         printf("  -o/--output: File to output the created SMDH/ICN to.\n");
         printf("  -r/--regions: Optional. Comma separated list of regions to lock the SMDH to.\n");
         printf("     Valid regions: regionfree, japan, northamerica, europe, australia, china, korea, taiwan.\n");
@@ -544,7 +573,7 @@ static void cmd_print_commands() {
 }
 
 static void cmd_print_usage(const std::string& executedFrom) {
-    printf("bannertool v%d.%d.%d\n", VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO);
+    cmd_print_version();
     printf("Usage: %s <command> <args>\n", executedFrom.c_str());
     cmd_print_commands();
 }
@@ -606,6 +635,7 @@ int cmd_process_command(int argc, char* argv[]) {
         return cmd_make_banner(images, audio, cgfxFiles, cwavFile, output);
     } else if(strcmp(command, "makesmdh") == 0) {
         const std::string icon = cmd_find_arg(args, "i", "icon", "");
+        const std::string smallIcon = cmd_find_arg(args, "si", "smallicon", "");
         const std::string output = cmd_find_arg(args, "o", "output", "");
         if(icon.empty() || output.empty()) {
             cmd_missing_args(command);
@@ -731,7 +761,7 @@ int cmd_process_command(int argc, char* argv[]) {
         smdh.settings.gameRatings[SMDH_RATING_GRB] = (u8) atoi(cmd_find_arg(args, "gr", "grb", "0").c_str());
         smdh.settings.gameRatings[SMDH_RATING_CGSRR] = (u8) atoi(cmd_find_arg(args, "cgr", "cgsrr", "0").c_str());
 
-        return cmd_make_smdh(smdh, icon, output);
+        return cmd_make_smdh(smdh, icon, smallIcon, output);
     } else if(strcmp(command, "makecwav") == 0) {
         const std::string input = cmd_find_arg(args, "i", "input", "");
         const std::string output = cmd_find_arg(args, "o", "output", "");
@@ -759,6 +789,9 @@ int cmd_process_command(int argc, char* argv[]) {
         }
 
         return cmd_lz11(input, output);
+    } else if(strcmp(command, "version") == 0) {
+        cmd_print_version();
+        return 0;
     } else {
         cmd_invalid_command(command);
         return -1;

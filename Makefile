@@ -28,11 +28,9 @@ BUILD_FLAGS_CC :=
 BUILD_FLAGS_CXX :=
 RUN_FLAGS :=
 
-VERSION_PARTS := $(subst ., ,$(shell git describe --tags --abbrev=0))
-
-VERSION_MAJOR := $(word 1, $(VERSION_PARTS))
-VERSION_MINOR := $(word 2, $(VERSION_PARTS))
-VERSION_MICRO := $(word 3, $(VERSION_PARTS))
+VERSION_MAJOR := 1
+VERSION_MINOR := 2
+VERSION_MICRO := 0
 
 # INTERNAL #
 
